@@ -218,3 +218,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project data and artifacts
+data/
+*.parquet
+*.duckdb
+*.duckdb.wal
+mlruns/
+mlflow.db
