@@ -5,8 +5,10 @@ requires-python = ">=3.12"
 dependencies = [
     "entsoe-py>=0.8.1",
     "matplotlib>=3.11.2",
+    "open-mastr>=1.0.0",
     "pandas>=3.1.0",
     "python-dotenv>=1.2.4",
+    "requests>=2.34.2",
 ]
 
 [dependency-groups]
