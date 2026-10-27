@@ -13,3 +13,5 @@
 | 2026-10-26 | Python 3.12 | All planned libraries (Dagster, dbt, LightGBM, GPyTorch) support it; 3.13 support is still patchy |
 | 2026-10-26 | Ruff rules E, F, I, UP, B, SIM, line length 100 | Catches real bugs without too much noise |
 | 2026-10-26 | CI runner pinned to ubuntu-24.04 | Avoids surprise changes when ubuntu-latest moves to 26 |
+| 2026-10-27 | Keep raw ENTSO-E data at 15-min; aggregate to hourly mean in dbt | Target is hourly; raw stays untouched so 15-min forecasting is possible later without re-downloading |
+| 2026-10-27 | Store all timestamps in UTC, convert only for display | Berlin time has 23 h and 25 h days at DST changes; UTC has none |
