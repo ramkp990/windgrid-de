@@ -52,6 +52,13 @@ ONSHORE_BOX = (5.8, 15.1, 47.2, 55.1)
 NORTH_SEA_BOX = (3.3, 9.0, 53.3, 56.0)
 BALTIC_BOX = (10.0, 15.0, 53.9, 55.1)
 
+IMPUTE_LEVELS = [
+    ["wind_farm", "state"],
+    ["postcode"],
+    ["municipality", "state"],
+    ["district", "state"],
+]
+
 
 def load_wind_units(db_path: Path = DEFAULT_DB) -> pd.DataFrame:
     """Read wind units from the open-mastr SQLite DB with English column names."""
@@ -126,6 +133,46 @@ def flag_bad_coords(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def impute_coords(df: pd.DataFrame) -> pd.DataFrame:
+    """Fill missing or bad coordinates with the centroid of good units at the same place.
+
+    Tries wind farm, postcode, municipality, district in that order.
+    Offshore units are only imputed from their wind farm.
+    Adds coord_source: 'mastr', the level used, or None if no match.
+    """
+    df = df.copy()
+    df["coord_source"] = df["coords_ok"].map({True: "mastr", False: None})
+    good = df[df["coords_ok"]]
+    offshore = df["location_type"] == "offshore"
+
+    for keys in IMPUTE_LEVELS:
+        level = "_".join(keys)
+        centroids = good.groupby(keys)[["lon", "lat"]].mean().add_suffix("_c").reset_index()
+        todo = df["coord_source"].isna()
+        if keys[0] != "wind_farm":
+            todo &= ~offshore
+
+        cand = (
+            df.loc[todo, keys]
+            .reset_index()
+            .merge(centroids, on=keys, how="left")
+            .set_index("index")
+            .dropna(subset=["lon_c"])
+        )
+        df.loc[cand.index, "lon"] = cand["lon_c"]
+        df.loc[cand.index, "lat"] = cand["lat_c"]
+        df.loc[cand.index, "coord_source"] = level
+        log.info("Imputed %d units from %s centroid", len(cand), level)
+
+    left = df["coord_source"].isna()
+    log.info(
+        "%d units still without usable coordinates (%.0f MW)",
+        left.sum(),
+        df.loc[left, "capacity_kw"].sum() / 1000,
+    )
+    return df
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     db_path = Path(os.environ.get("MASTR_DB_PATH", DEFAULT_DB))
@@ -134,6 +181,7 @@ def main() -> None:
     df = filter_built(df)
     df = flag_missing_coords(df)
     df = flag_bad_coords(df)
+    df = impute_coords(df)
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(OUT_PATH, index=False)

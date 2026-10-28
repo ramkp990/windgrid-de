@@ -1,6 +1,11 @@
 import pandas as pd
 
-from ingestion.mastr_turbines import filter_built, flag_bad_coords, flag_missing_coords
+from ingestion.mastr_turbines import (
+    filter_built,
+    flag_bad_coords,
+    flag_missing_coords,
+    impute_coords,
+)
 
 
 def make_units():
@@ -46,3 +51,27 @@ def test_flag_bad_coords():
     )
     out = flag_bad_coords(df)
     assert list(out["coords_ok"]) == [True, False, True, False, False]
+
+
+def test_impute_coords():
+    df = pd.DataFrame(
+        {
+            "unit_id": ["good1", "good2", "missing_land", "missing_sea", "no_match"],
+            "location_type": ["onshore", "onshore", "onshore", "offshore", "onshore"],
+            "wind_farm": [None, None, None, None, None],
+            "state": ["SH", "SH", "SH", "SH", "BY"],
+            "postcode": ["24000", "24000", "24000", "24000", "80000"],
+            "municipality": [None] * 5,
+            "district": [None] * 5,
+            "lon": [10.0, 10.2, None, None, None],
+            "lat": [54.0, 54.2, None, None, None],
+            "capacity_kw": [3000.0] * 5,
+            "coords_ok": [True, True, False, False, False],
+        }
+    )
+    out = impute_coords(df).set_index("unit_id")
+
+    assert out.loc["missing_land", "coord_source"] == "postcode"
+    assert round(out.loc["missing_land", "lon"], 2) == 10.1
+    assert out.loc["missing_sea", "coord_source"] is None
+    assert out.loc["no_match", "coord_source"] is None
