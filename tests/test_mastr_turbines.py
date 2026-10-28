@@ -75,3 +75,5 @@ def test_impute_coords():
     assert round(out.loc["missing_land", "lon"], 2) == 10.1
     assert out.loc["missing_sea", "coord_source"] is None
     assert out.loc["no_match", "coord_source"] is None
+    assert pd.isna(out.loc["missing_sea", "coord_source"])
+    assert pd.isna(out.loc["no_match", "coord_source"])
