@@ -20,3 +20,4 @@
 | 2026-10-27 | Keep decommissioned and temporarily shut-down units; drop only planned ones | Needed to rebuild historical capacity since 2024 |
 | 2026-10-27 | Drop units without commissioning date | Can't place them on the capacity timeline |
 | 2026-10-27 | Rename MaStR columns to English snake_case on load | Readable code downstream |
+| 2026-10-27 | Coordinate check with bounding boxes (land, North Sea, Baltic); flag only | Catches obvious errors cheaply; exact border polygon only if capacity check fails |
