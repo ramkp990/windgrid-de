@@ -17,3 +17,6 @@
 | 2026-10-27 | Store all timestamps in UTC, convert only for display | Berlin time has 23 h and 25 h days at DST changes; UTC has none |
 | 2026-10-27 | Main weather source: Open-Meteo Single Runs API, ECMWF IFS HRES 9 km, 00 UTC run of D-1 (from 2024-03-14) | Matches exactly what is available at the 10:00 issue time; previous_day1 leaks later runs, previous_day2 is staler than reality |
 | 2026-10-27 | ICON via Previous Runs previous_day2 as optional second model | ICON single runs only from 2026-04; day2 never leaks |
+| 2026-10-27 | Keep decommissioned and temporarily shut-down units; drop only planned ones | Needed to rebuild historical capacity since 2024 |
+| 2026-10-27 | Drop units without commissioning date | Can't place them on the capacity timeline |
+| 2026-10-27 | Rename MaStR columns to English snake_case on load | Readable code downstream |

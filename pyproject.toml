@@ -7,8 +7,10 @@ dependencies = [
     "matplotlib>=3.11.2",
     "open-mastr>=1.0.0",
     "pandas>=3.1.0",
+    "pyarrow>=26.0.0",
     "python-dotenv>=1.2.4",
     "requests>=2.34.2",
+    "sqlalchemy>=2.1.6",
 ]
 
 [dependency-groups]
