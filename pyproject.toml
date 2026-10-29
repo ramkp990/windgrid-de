@@ -10,6 +10,7 @@ dependencies = [
     "pyarrow>=26.0.0",
     "python-dotenv>=1.2.4",
     "requests>=2.34.2",
+    "scikit-learn>=1.9.1",
     "sqlalchemy>=2.1.6",
 ]
 

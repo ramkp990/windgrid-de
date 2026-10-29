@@ -1,6 +1,7 @@
 import pandas as pd
 
 from ingestion.mastr_turbines import (
+    assign_zone,
     filter_built,
     flag_bad_coords,
     flag_missing_coords,
@@ -95,3 +96,46 @@ def test_impute_skips_spread_out_wind_farm_names():
     )
     out = impute_coords(df).set_index("unit_id")
     assert out.loc["missing", "coord_source"] == "district_state"
+
+
+def test_assign_zone():
+    df = pd.DataFrame(
+        {
+            "unit_id": ["coded", "baltic", "north_sea", "sh", "nrw_new", "a1", "a2"],
+            "status": ["operating"] * 7,
+            "location_type": [
+                "onshore",
+                "offshore",
+                "offshore",
+                "onshore",
+                "onshore",
+                "onshore",
+                "onshore",
+            ],
+            "sea": [None, "Ostsee", "Nordsee", None, None, None, None],
+            "control_zone_code": pd.array(
+                [1001572, None, None, None, None, 1000010, 1000010], dtype="Int64"
+            ),
+            "state": [
+                "Baden-Württemberg",
+                None,
+                None,
+                "Schleswig-Holstein",
+                "Nordrhein-Westfalen",
+                "Nordrhein-Westfalen",
+                "Nordrhein-Westfalen",
+            ],
+            "lon": [9.0, 13.0, 6.5, 9.5, 7.0, 7.1, 6.9],
+            "lat": [48.5, 54.6, 54.2, 54.3, 51.5, 51.5, 51.4],
+            "coord_source": ["mastr"] * 7,
+            "capacity_kw": [3000.0] * 7,
+        }
+    )
+    out = assign_zone(df, k=1).set_index("unit_id")
+
+    assert out.loc["coded", "zone"] == "TransnetBW"
+    assert out.loc["baltic", "zone"] == "50Hertz"
+    assert out.loc["north_sea", "zone"] == "TenneT"
+    assert out.loc["sh", "zone"] == "TenneT"
+    assert out.loc["nrw_new", "zone"] == "Amprion"
+    assert out.loc["nrw_new", "zone_source"] == "knn"

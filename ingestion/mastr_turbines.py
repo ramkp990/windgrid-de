@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 import pandas as pd
+from sklearn.neighbors import KNeighborsClassifier
 from sqlalchemy import create_engine
 
 log = logging.getLogger(__name__)
@@ -60,6 +61,32 @@ IMPUTE_LEVELS = [
 ]
 
 MAX_FARM_SPREAD_DEG = 0.05
+
+CODE_TO_ZONE = {
+    1000001: "50Hertz",
+    1001564: "TenneT",
+    1000010: "Amprion",
+    1001572: "TransnetBW",
+}
+
+STATE_TO_ZONE = {
+    "Berlin": "50Hertz",
+    "Brandenburg": "50Hertz",
+    "Hamburg": "50Hertz",
+    "Mecklenburg-Vorpommern": "50Hertz",
+    "Sachsen": "50Hertz",
+    "Sachsen-Anhalt": "50Hertz",
+    "Thüringen": "50Hertz",
+    "Schleswig-Holstein": "TenneT",
+    "Bremen": "TenneT",
+    "Rheinland-Pfalz": "Amprion",
+    "Saarland": "Amprion",
+    "Baden-Württemberg": "TransnetBW",
+}
+
+SPLIT_STATES = {"Niedersachsen", "Nordrhein-Westfalen", "Hessen", "Bayern"}
+SPLIT_ZONES = {"TenneT", "Amprion"}
+KNN_NEIGHBOURS = 5
 
 
 def load_wind_units(db_path: Path = DEFAULT_DB) -> pd.DataFrame:
@@ -182,6 +209,50 @@ def impute_coords(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def assign_zone(df: pd.DataFrame, k: int = KNN_NEIGHBOURS) -> pd.DataFrame:
+    """Assign each unit to a TSO zone. Adds zone and zone_source columns.
+
+    Order: MaStR zone code, offshore by sea, onshore by federal state,
+    onshore in split states by k nearest TenneT/Amprion neighbours.
+    """
+    df = df.copy()
+    df["zone"] = df["control_zone_code"].map(CODE_TO_ZONE)
+    df["zone_source"] = df["zone"].notna().map({True: "mastr_code", False: None})
+
+    offshore = df["location_type"] == "offshore"
+    has_xy = df["coord_source"].notna()
+
+    todo = df["zone"].isna() & offshore
+    baltic = df["sea"].astype("string").str.contains("Ost", na=False) | (
+        df["sea"].isna() & (df["lon"] > 10)
+    )
+    df.loc[todo, "zone"] = baltic[todo].map({True: "50Hertz", False: "TenneT"})
+    df.loc[todo, "zone_source"] = "offshore_sea"
+
+    todo = df["zone"].isna() & ~offshore
+    by_state = df.loc[todo, "state"].map(STATE_TO_ZONE).dropna()
+    df.loc[by_state.index, "zone"] = by_state
+    df.loc[by_state.index, "zone_source"] = "state"
+
+    train = df[df["zone"].isin(SPLIT_ZONES) & ~offshore & has_xy]
+    todo = df["zone"].isna() & df["state"].isin(SPLIT_STATES) & has_xy
+    if todo.any():
+        knn = KNeighborsClassifier(n_neighbors=k).fit(train[["lon", "lat"]], train["zone"])
+        df.loc[todo, "zone"] = knn.predict(df.loc[todo, ["lon", "lat"]])
+        df.loc[todo, "zone_source"] = "knn"
+
+    log.info("Zone sources:\n%s", df["zone_source"].value_counts(dropna=False).to_string())
+    left = df["zone"].isna()
+    log.info(
+        "%d units without zone (%.0f MW)", left.sum(), df.loc[left, "capacity_kw"].sum() / 1000
+    )
+
+    op = df[df["status"] == "operating"]
+    gw = op.groupby(["zone", "location_type"])["capacity_kw"].sum().unstack() / 1e6
+    log.info("Operating capacity per zone (GW):\n%s", gw.round(2).to_string())
+    return df
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     db_path = Path(os.environ.get("MASTR_DB_PATH", DEFAULT_DB))
@@ -191,6 +262,7 @@ def main() -> None:
     df = flag_missing_coords(df)
     df = flag_bad_coords(df)
     df = impute_coords(df)
+    df = assign_zone(df)
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(OUT_PATH, index=False)
