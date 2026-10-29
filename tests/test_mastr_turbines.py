@@ -73,7 +73,25 @@ def test_impute_coords():
 
     assert out.loc["missing_land", "coord_source"] == "postcode"
     assert round(out.loc["missing_land", "lon"], 2) == 10.1
-    assert out.loc["missing_sea", "coord_source"] is None
-    assert out.loc["no_match", "coord_source"] is None
     assert pd.isna(out.loc["missing_sea", "coord_source"])
     assert pd.isna(out.loc["no_match", "coord_source"])
+
+
+def test_impute_skips_spread_out_wind_farm_names():
+    df = pd.DataFrame(
+        {
+            "unit_id": ["a", "b", "missing"],
+            "location_type": ["onshore"] * 3,
+            "wind_farm": ["Windrad"] * 3,
+            "state": ["NRW"] * 3,
+            "district": ["X"] * 3,
+            "postcode": ["1", "2", "3"],
+            "municipality": [None] * 3,
+            "lon": [6.0, 9.0, None],
+            "lat": [51.0, 52.0, None],
+            "capacity_kw": [10.0] * 3,
+            "coords_ok": [True, True, False],
+        }
+    )
+    out = impute_coords(df).set_index("unit_id")
+    assert out.loc["missing", "coord_source"] == "district_state"

@@ -53,11 +53,13 @@ NORTH_SEA_BOX = (3.3, 9.0, 53.3, 56.0)
 BALTIC_BOX = (10.0, 15.0, 53.9, 55.1)
 
 IMPUTE_LEVELS = [
-    ["wind_farm", "state"],
+    ["wind_farm", "district"],
     ["postcode"],
     ["municipality", "state"],
     ["district", "state"],
 ]
+
+MAX_FARM_SPREAD_DEG = 0.05
 
 
 def load_wind_units(db_path: Path = DEFAULT_DB) -> pd.DataFrame:
@@ -147,7 +149,14 @@ def impute_coords(df: pd.DataFrame) -> pd.DataFrame:
 
     for keys in IMPUTE_LEVELS:
         level = "_".join(keys)
-        centroids = good.groupby(keys)[["lon", "lat"]].mean().add_suffix("_c").reset_index()
+        # centroids = good.groupby(keys)[["lon", "lat"]].mean().add_suffix("_c").reset_index()
+        grouped = good.groupby(keys)[["lon", "lat"]]
+        centroids = grouped.median().add_suffix("_c")
+        if keys[0] == "wind_farm":
+            spread = grouped.std().fillna(0).max(axis=1)
+            centroids = centroids[spread < MAX_FARM_SPREAD_DEG]
+        centroids = centroids.reset_index()
+
         todo = df["coord_source"].isna()
         if keys[0] != "wind_farm":
             todo &= ~offshore

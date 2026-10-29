@@ -30,3 +30,5 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"
+[tool.ruff.lint.per-file-ignores]
+"notebooks/*.ipynb" = ["E501"]
