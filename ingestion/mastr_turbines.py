@@ -13,7 +13,29 @@ log = logging.getLogger(__name__)
 DEFAULT_DB = Path.home() / ".open-MaStR" / "data" / "sqlite" / "open-mastr.db"
 # OUT_PATH = Path("data/interim/turbines_stage1.parquet")
 OUT_PATH = Path(__file__).resolve().parents[1] / "data" / "interim" / "turbines_stage1.parquet"
-CAPACITY_PATH = Path(__file__).resolve().parents[1] / "data" / "interim" / "capacity_daily.parquet"
+PROCESSED_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
+TURBINES_PATH = PROCESSED_DIR / "turbines.parquet"
+CAPACITY_PATH = PROCESSED_DIR / "capacity_daily.parquet"
+
+FINAL_COLUMNS = [
+    "unit_id",
+    "status",
+    "location_type",
+    "zone",
+    "zone_source",
+    "capacity_kw",
+    "hub_height_m",
+    "rotor_diameter_m",
+    "manufacturer",
+    "model",
+    "lon",
+    "lat",
+    "coord_source",
+    "state",
+    "commissioned",
+    "decommissioned",
+    "wind_farm",
+]
 CAPACITY_START = "2021-01-01"
 
 COLUMNS = {
@@ -276,6 +298,17 @@ def assign_zone(
     return df
 
 
+def finalize(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only units with a zone and usable coordinates, and the final columns."""
+    keep = df["zone"].notna() & df["coord_source"].notna()
+    log.info(
+        "Final: dropping %d units without zone or coordinates (%.1f MW)",
+        (~keep).sum(),
+        df.loc[~keep, "capacity_kw"].sum() / 1000,
+    )
+    return df.loc[keep, FINAL_COLUMNS].reset_index(drop=True)
+
+
 def daily_capacity(
     df: pd.DataFrame, start: str = CAPACITY_START, end: str | None = None
 ) -> pd.DataFrame:
@@ -322,6 +355,7 @@ def main() -> None:
 
     raw = load_wind_units(db_path)
     labels = zone_labels(raw)
+
     df = filter_built(raw)
     df = flag_missing_coords(df)
     df = flag_bad_coords(df)
@@ -331,7 +365,13 @@ def main() -> None:
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(OUT_PATH, index=False)
     log.info("Wrote %d units to %s", len(df), OUT_PATH)
-    cap = daily_capacity(df)
+
+    final = finalize(df)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    final.to_parquet(TURBINES_PATH, index=False)
+    log.info("Wrote %d clean units to %s", len(final), TURBINES_PATH)
+
+    cap = daily_capacity(final)
     cap.to_parquet(CAPACITY_PATH, index=False)
     log.info("Wrote %d rows to %s", len(cap), CAPACITY_PATH)
 

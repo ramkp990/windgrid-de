@@ -5,6 +5,7 @@ from ingestion.mastr_turbines import (
     assign_zone,
     daily_capacity,
     filter_built,
+    finalize,
     flag_bad_coords,
     flag_missing_coords,
     impute_coords,
@@ -155,3 +156,17 @@ def test_daily_capacity():
     )
     out = daily_capacity(df, start="2021-01-01", end="2021-01-05")
     assert out["capacity_mw"].tolist() == pytest.approx([1.0, 1.5, 3.5, 2.5, 2.5])
+
+
+def test_finalize_drops_units_without_zone_or_coords():
+    from ingestion.mastr_turbines import FINAL_COLUMNS
+
+    df = pd.DataFrame({c: [None] * 3 for c in FINAL_COLUMNS})
+    df["unit_id"] = ["ok", "no_zone", "no_coords"]
+    df["zone"] = ["TenneT", None, "TenneT"]
+    df["coord_source"] = ["mastr", "mastr", None]
+    df["capacity_kw"] = [1000.0, 1000.0, 1000.0]
+
+    out = finalize(df)
+    assert out["unit_id"].tolist() == ["ok"]
+    assert list(out.columns) == FINAL_COLUMNS
