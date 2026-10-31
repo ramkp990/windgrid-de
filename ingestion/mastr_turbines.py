@@ -13,6 +13,8 @@ log = logging.getLogger(__name__)
 DEFAULT_DB = Path.home() / ".open-MaStR" / "data" / "sqlite" / "open-mastr.db"
 # OUT_PATH = Path("data/interim/turbines_stage1.parquet")
 OUT_PATH = Path(__file__).resolve().parents[1] / "data" / "interim" / "turbines_stage1.parquet"
+CAPACITY_PATH = Path(__file__).resolve().parents[1] / "data" / "interim" / "capacity_daily.parquet"
+CAPACITY_START = "2021-01-01"
 
 COLUMNS = {
     "EinheitMastrNummer": "unit_id",
@@ -274,6 +276,46 @@ def assign_zone(
     return df
 
 
+def daily_capacity(
+    df: pd.DataFrame, start: str = CAPACITY_START, end: str | None = None
+) -> pd.DataFrame:
+    """Installed capacity (MW) per zone, location type and day.
+
+    Each unit adds its capacity on its commissioning date and removes it
+    on its decommissioning date. Units built before start count from day one.
+    """
+    end = end or pd.Timestamp.today().normalize()
+    days = pd.date_range(start, end, freq="D")
+    d = df[df["zone"].notna()]
+
+    added = d[["zone", "location_type", "commissioned", "capacity_kw"]].rename(
+        columns={"commissioned": "date"}
+    )
+    removed = d.loc[
+        d["decommissioned"].notna(), ["zone", "location_type", "decommissioned", "capacity_kw"]
+    ].rename(columns={"decommissioned": "date"})
+    removed["capacity_kw"] = -removed["capacity_kw"]
+
+    events = pd.concat([added, removed])
+    events["date"] = events["date"].dt.normalize().clip(lower=days[0])
+    events = events.groupby(["zone", "location_type", "date"], as_index=False)["capacity_kw"].sum()
+
+    combos = events[["zone", "location_type"]].drop_duplicates()
+    grid = combos.merge(pd.DataFrame({"date": days}), how="cross")
+    out = grid.merge(events, on=["zone", "location_type", "date"], how="left")
+    out["capacity_kw"] = out["capacity_kw"].fillna(0)
+    out = out.sort_values(["zone", "location_type", "date"])
+    out["capacity_mw"] = out.groupby(["zone", "location_type"])["capacity_kw"].cumsum() / 1000
+
+    latest = out[out["date"] == out["date"].max()]
+    log.info(
+        "Capacity on %s (MW):\n%s",
+        out["date"].max().date(),
+        latest[["zone", "location_type", "capacity_mw"]].round(0).to_string(index=False),
+    )
+    return out[["date", "zone", "location_type", "capacity_mw"]].reset_index(drop=True)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     db_path = Path(os.environ.get("MASTR_DB_PATH", DEFAULT_DB))
@@ -289,6 +331,9 @@ def main() -> None:
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(OUT_PATH, index=False)
     log.info("Wrote %d units to %s", len(df), OUT_PATH)
+    cap = daily_capacity(df)
+    cap.to_parquet(CAPACITY_PATH, index=False)
+    log.info("Wrote %d rows to %s", len(cap), CAPACITY_PATH)
 
 
 if __name__ == "__main__":

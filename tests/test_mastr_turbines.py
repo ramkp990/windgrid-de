@@ -1,7 +1,9 @@
 import pandas as pd
+import pytest
 
 from ingestion.mastr_turbines import (
     assign_zone,
+    daily_capacity,
     filter_built,
     flag_bad_coords,
     flag_missing_coords,
@@ -139,3 +141,17 @@ def test_assign_zone():
     assert out.loc["sh", "zone"] == "TenneT"
     assert out.loc["nrw_new", "zone"] == "Amprion"
     assert out.loc["nrw_new", "zone_source"] == "knn"
+
+
+def test_daily_capacity():
+    df = pd.DataFrame(
+        {
+            "zone": ["TenneT", "TenneT", "TenneT"],
+            "location_type": ["onshore"] * 3,
+            "commissioned": pd.to_datetime(["2019-05-01", "2021-01-03", "2021-01-02"]),
+            "decommissioned": pd.to_datetime(["2021-01-04", None, None]),
+            "capacity_kw": [1000.0, 2000.0, 500.0],
+        }
+    )
+    out = daily_capacity(df, start="2021-01-01", end="2021-01-05")
+    assert out["capacity_mw"].tolist() == pytest.approx([1.0, 1.5, 3.5, 2.5, 2.5])
