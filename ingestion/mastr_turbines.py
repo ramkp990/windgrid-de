@@ -209,7 +209,24 @@ def impute_coords(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def assign_zone(df: pd.DataFrame, k: int = KNN_NEIGHBOURS) -> pd.DataFrame:
+def zone_labels(raw: pd.DataFrame) -> pd.DataFrame:
+    """Known TenneT/Amprion locations from all coded onshore units, including planned ones.
+
+    Planned units don't count for capacity, but their zone code still shows
+    which zone that location belongs to.
+    """
+    coded = raw[raw["control_zone_code"].notna() & (raw["location_type"] == "onshore")]
+    coded = coded[_in_box(coded, ONSHORE_BOX)]
+    labels = coded[["lon", "lat"]].copy()
+    labels["zone"] = coded["control_zone_code"].map(CODE_TO_ZONE)
+    labels = labels[labels["zone"].isin(SPLIT_ZONES)]
+    log.info("Zone labels for kNN: %d (incl. planned units)", len(labels))
+    return labels
+
+
+def assign_zone(
+    df: pd.DataFrame, labels: pd.DataFrame | None = None, k: int = KNN_NEIGHBOURS
+) -> pd.DataFrame:
     """Assign each unit to a TSO zone. Adds zone and zone_source columns.
 
     Order: MaStR zone code, offshore by sea, onshore by federal state,
@@ -234,7 +251,11 @@ def assign_zone(df: pd.DataFrame, k: int = KNN_NEIGHBOURS) -> pd.DataFrame:
     df.loc[by_state.index, "zone"] = by_state
     df.loc[by_state.index, "zone_source"] = "state"
 
-    train = df[df["zone"].isin(SPLIT_ZONES) & ~offshore & has_xy]
+    # train = df[df["zone"].isin(SPLIT_ZONES) & ~offshore & has_xy]
+    train = df.loc[df["zone"].isin(SPLIT_ZONES) & ~offshore & has_xy, ["lon", "lat", "zone"]]
+    if labels is not None:
+        train = pd.concat([train, labels], ignore_index=True)
+
     todo = df["zone"].isna() & df["state"].isin(SPLIT_STATES) & has_xy
     if todo.any():
         knn = KNeighborsClassifier(n_neighbors=k).fit(train[["lon", "lat"]], train["zone"])
@@ -257,12 +278,13 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     db_path = Path(os.environ.get("MASTR_DB_PATH", DEFAULT_DB))
 
-    df = load_wind_units(db_path)
-    df = filter_built(df)
+    raw = load_wind_units(db_path)
+    labels = zone_labels(raw)
+    df = filter_built(raw)
     df = flag_missing_coords(df)
     df = flag_bad_coords(df)
     df = impute_coords(df)
-    df = assign_zone(df)
+    df = assign_zone(df, labels)
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(OUT_PATH, index=False)
