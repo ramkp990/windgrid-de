@@ -3114,6 +3114,7 @@ dependencies = [
     { name = "requests" },
     { name = "scikit-learn" },
     { name = "sqlalchemy" },
+    { name = "tqdm" },
 ]
 
 [package.dev-dependencies]
@@ -3135,6 +3136,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.34.2" },
     { name = "scikit-learn", specifier = ">=1.9.1" },
     { name = "sqlalchemy", specifier = ">=2.1.6" },
+    { name = "tqdm", specifier = ">=4.70.1" },
 ]
 
 [package.metadata.requires-dev]

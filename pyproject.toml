@@ -12,6 +12,7 @@ dependencies = [
     "requests>=2.34.2",
     "scikit-learn>=1.9.1",
     "sqlalchemy>=2.1.6",
+    "tqdm>=4.70.1",
 ]
 
 [dependency-groups]
