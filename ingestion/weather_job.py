@@ -130,7 +130,7 @@ def run(
             df["clusters_hash"] = chash
             write_atomic(df, run_path(out_dir, r))
             stats["fetched"] += 1
-        log.info("Saved run %s (%d rows), %d/%d", r.date(), len(df), stats["fetched"], len(batch))
+        # log.info("Saved run %s (%d rows), %d/%d", r.date(), len(df), stats["fetched"], len(batch))
 
     log.info("Done: %s", stats)
     return stats
