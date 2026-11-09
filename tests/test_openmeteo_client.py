@@ -14,6 +14,8 @@ class FakeResponse:
         self.text = text
 
     def json(self):
+        if self._payload is None:
+            raise ValueError("no JSON")
         return self._payload
 
     def raise_for_status(self):
@@ -48,6 +50,8 @@ class FakeSession:
         status = self.statuses.pop(0) if self.statuses else 200
         if status == 400:
             return FakeResponse(400, text='{"reason":"The requested model run is not available."}')
+        if status == "empty":
+            return FakeResponse(200, payload=None, text="")
         if status != 200:
             return FakeResponse(status)
         return FakeResponse(200, fake_payload(params))
@@ -102,3 +106,10 @@ def test_throttle_waits_per_location():
     sleeps = []
     make_client(FakeSession(), sleeps).fetch_run(RUN, locations(10))
     assert sleeps == [5.0]
+
+
+def test_retries_empty_body_then_succeeds():
+    session = FakeSession(statuses=["empty"])
+    out = make_client(session).fetch_run(RUN, locations(5))
+    assert len(session.calls) == 2
+    assert len(out) == 15

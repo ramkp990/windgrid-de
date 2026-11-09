@@ -47,6 +47,10 @@ class RunNotAvailableError(Exception):
     """The requested model run is not in the Open-Meteo archive."""
 
 
+class BadResponseError(Exception):
+    """Status 200, but the body isn't valid JSON (empty or cut off). Usually temporary."""
+
+
 def parse_response(payload, locations: pd.DataFrame, run: pd.Timestamp) -> pd.DataFrame:
     """Turn the JSON answer (dict for one location, list for several) into one table.
 
@@ -94,10 +98,16 @@ class OpenMeteoClient:
                 if r.status_code == 400 and "not available" in r.text:
                     raise RunNotAvailableError(r.text[:200])
                 r.raise_for_status()
-                payload = r.json()
+                try:
+                    payload = r.json()
+                except ValueError as e:
+                    raise BadResponseError(
+                        f"status {r.status_code}, body starts {r.text[:200]!r}"
+                    ) from e
                 break
             except Exception as exc:
-                if not is_retryable(exc) or attempt == self._max_attempts:
+                retryable = is_retryable(exc) or isinstance(exc, BadResponseError)
+                if not retryable or attempt == self._max_attempts:
                     raise
                 wait = min(BACKOFF_BASE_SECONDS * 2 ** (attempt - 1), BACKOFF_MAX_SECONDS)
                 log.warning(
