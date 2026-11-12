@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 
 import pandas as pd
+import requests
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -29,7 +30,7 @@ MISSING_FILE = "_missing_runs.txt"
 
 ARCHIVE_START = "2024-03-14"
 RUN_HOUR_UTC = 0
-DAILY_BUDGET = 9500
+DAILY_BUDGET = 8000
 RECENT_DAYS = 2
 
 
@@ -104,7 +105,7 @@ def run(
         len(clusters),
     )
 
-    stats = {"fetched": 0, "not_available": 0, "remaining": len(todo) - len(batch)}
+    stats = {"fetched": 0, "not_available": 0, "remaining": 0, "stopped_on_limit": False}
     with logging_redirect_tqdm():
         bar = tqdm(batch, desc="Weather runs", unit="run")
         for r in bar:
@@ -123,6 +124,15 @@ def run(
                 else:
                     log.info("Run %s not published yet, will retry next time", r.date())
                 continue
+            except requests.HTTPError as e:
+                if e.response is not None and e.response.status_code == 429:
+                    log.warning(
+                        "Open-Meteo limit reached (%s). Stopping; run again tomorrow.",
+                        e.response.text[:200],
+                    )
+                    stats["stopped_on_limit"] = True
+                    break
+                raise
 
             df["loaded_at_utc"] = pd.Timestamp.now(tz="UTC")
             df["source"] = "open-meteo single-runs"
@@ -131,7 +141,7 @@ def run(
             write_atomic(df, run_path(out_dir, r))
             stats["fetched"] += 1
         # log.info("Saved run %s (%d rows), %d/%d", r.date(), len(df), stats["fetched"], len(batch))
-
+    stats["remaining"] = len(todo) - stats["fetched"] - stats["not_available"]
     log.info("Done: %s", stats)
     return stats
 
