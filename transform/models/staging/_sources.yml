@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw files written by the ingestion jobs and the turbine pipeline.
+    tables:
+      - name: entsoe_actual_wind
+        meta:
+          external_location: "read_parquet('data/raw/entsoe/actual_wind/*/*.parquet', hive_partitioning = true)"
+      - name: entsoe_forecast_wind
+        meta:
+          external_location: "read_parquet('data/raw/entsoe/forecast_wind/*/*.parquet', hive_partitioning = true)"
+      - name: openmeteo_ecmwf
+        meta:
+          external_location: "read_parquet('data/raw/openmeteo/ecmwf_ifs/*/*.parquet', hive_partitioning = true)"
+      - name: clusters
+        meta:
+          external_location: "read_parquet('data/processed/clusters.parquet')"
+      - name: turbine_clusters
+        meta:
+          external_location: "read_parquet('data/processed/turbine_clusters.parquet')"
+      - name: turbines
+        meta:
+          external_location: "read_parquet('data/processed/turbines.parquet')"
