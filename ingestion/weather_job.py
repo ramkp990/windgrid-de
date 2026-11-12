@@ -19,7 +19,12 @@ import requests
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from ingestion.openmeteo_client import MODEL, OpenMeteoClient, RunNotAvailableError
+from ingestion.openmeteo_client import (
+    MODEL,
+    BadResponseError,
+    OpenMeteoClient,
+    RunNotAvailableError,
+)
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +37,7 @@ ARCHIVE_START = "2024-03-14"
 RUN_HOUR_UTC = 0
 DAILY_BUDGET = 8000
 RECENT_DAYS = 2
+MAX_CONSECUTIVE_FAILURES = 3
 
 
 def clusters_hash(clusters: pd.DataFrame) -> str:
@@ -105,7 +111,15 @@ def run(
         len(clusters),
     )
 
-    stats = {"fetched": 0, "not_available": 0, "remaining": 0, "stopped_on_limit": False}
+    stats = {
+        "fetched": 0,
+        "not_available": 0,
+        "failed": 0,
+        "remaining": 0,
+        "stopped_on_limit": False,
+        "stopped_on_errors": False,
+    }
+    consecutive_failures = 0
     with logging_redirect_tqdm():
         bar = tqdm(batch, desc="Weather runs", unit="run")
         for r in bar:
@@ -124,14 +138,28 @@ def run(
                 else:
                     log.info("Run %s not published yet, will retry next time", r.date())
                 continue
-            except requests.HTTPError as e:
-                if e.response is not None and e.response.status_code == 429:
+            except (requests.RequestException, BadResponseError) as e:
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                if status == 429:
                     log.warning(
                         "Open-Meteo limit reached (%s). Stopping; run again tomorrow.",
                         e.response.text[:200],
                     )
                     stats["stopped_on_limit"] = True
                     break
+                if status is not None and status < 500:
+                    raise
+                stats["failed"] += 1
+                consecutive_failures += 1
+                log.warning("Run %s failed after retries (%s), skipping for now", r.date(), e)
+                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    log.warning(
+                        "%d runs in a row failed, Open-Meteo seems down. Stopping.",
+                        consecutive_failures,
+                    )
+                    stats["stopped_on_errors"] = True
+                    break
+                continue
                 raise
 
             df["loaded_at_utc"] = pd.Timestamp.now(tz="UTC")
@@ -140,6 +168,7 @@ def run(
             df["clusters_hash"] = chash
             write_atomic(df, run_path(out_dir, r))
             stats["fetched"] += 1
+            consecutive_failures = 0
         # log.info("Saved run %s (%d rows), %d/%d", r.date(), len(df), stats["fetched"], len(batch))
     stats["remaining"] = len(todo) - stats["fetched"] - stats["not_available"]
     log.info("Done: %s", stats)

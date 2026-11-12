@@ -22,3 +22,6 @@ sources:
       - name: turbines
         meta:
           external_location: "read_parquet('data/processed/turbines.parquet')"
+      - name: capacity_daily
+        meta:
+          external_location: "read_parquet('data/processed/capacity_daily.parquet')"

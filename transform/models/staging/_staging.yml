@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: stg_entsoe__actual_wind
+    description: Actual wind generation per TSO zone and type, 15-min, UTC.
+    columns:
+      - name: timestamp_utc
+        data_tests: [not_null]
+      - name: zone
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["50Hertz", "Amprion", "TenneT", "TransnetBW"]
+      - name: location_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["onshore", "offshore"]
+
+  - name: stg_entsoe__forecast_wind
+    description: TSO day-ahead wind forecast per zone and type, 15-min, UTC.
+    columns:
+      - name: timestamp_utc
+        data_tests: [not_null]
+      - name: zone
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["50Hertz", "Amprion", "TenneT", "TransnetBW"]
+
+  - name: stg_openmeteo__ecmwf
+    description: ECMWF IFS forecast per cluster and hour, one row per run, UTC.
+    columns:
+      - name: run_utc
+        data_tests: [not_null]
+      - name: cluster_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_clusters')
+                field: cluster_id
+
+  - name: stg_clusters
+    description: Weather clusters with capacity-weighted centre and hub height.
+    columns:
+      - name: cluster_id
+        data_tests: [unique, not_null]
+
+  - name: stg_capacity_daily
+    description: Installed capacity (MW) per zone, type and day since 2021.
+    columns:
+      - name: date
+        data_tests: [not_null]
